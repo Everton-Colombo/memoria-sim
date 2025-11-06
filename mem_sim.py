@@ -1,8 +1,10 @@
 import collections
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional, Literal
 
 class MemorySimulator:
-    def __init__(self, page_size, num_tlb_entries, num_frames, rep_policy):
+    def __init__(self, page_size: int, num_tlb_entries: int, num_frames: int, rep_policy: Literal['LRU', 'SecondChance'], debug: bool = False):
+        self.debug = debug
+        
         self.page_size = page_size
         self.num_tlb_entries = num_tlb_entries
         self.num_frames = num_frames    
@@ -13,7 +15,7 @@ class MemorySimulator:
 
         self.tlb: collections.OrderedDict = collections.OrderedDict()
         self.page_table: Dict[int, int] = {}
-        self.frames: List[Tuple[int, int]] = [None] * num_frames
+        self.frames: List[Optional[int]] = [None] * num_frames # frames[frame_number] = page_number
 
         # contadores de estatísticas
         self.tlb_hits = 0
@@ -53,15 +55,42 @@ class MemorySimulator:
         """
         Inserts/updates an entry in the TLB using LRU policy.
         """
-        
-        if page_number in self.tlb:
-             self.tlb.move_to_end(page_number)
-        else:
-            if len(self.tlb) >= self.num_tlb_entries:
-                self.tlb.popitem(last=False) # Remove the least recently used entry
-            self.tlb[page_number] = frame_number
+        if len(self.tlb) >= self.num_tlb_entries:
+            self.tlb.popitem(last=False) # Remove the least recently used entry
+        self.tlb[page_number] = frame_number
+    
+    def _allocate_frame(self) -> Optional[int]:
+        """
+        Finds a free frame. Returns the frame number or None if all frames are occupied.
+        """
+        for i in range(self.num_frames):
+            if self.frames[i] is None:
+                return i
+        return None
     
     def _handle_page_fault(self, page_number: int) -> int:
+        """
+        Handles a page fault. Finds a free frame or applies the replacement policy.
+        
+        Returns the frame number where the page is loaded.
+        """
+        
+        frame_number = self._allocate_frame()
+        
+        if frame_number is None:
+            if self.rep_policy == 'LRU':
+                frame_number = self._find_victim_lru(page_number)
+            elif self.rep_policy == 'SecondChance':
+                frame_number = self._find_victim_second_chance(page_number)
+        
+        self.frames[frame_number] = page_number
+        self.page_table[page_number] = frame_number
+        self._update_tlb(page_number, frame_number)
+    
+    def _find_victim_lru(self, page_number: int) -> int:
+        pass
+    
+    def _find_victim_second_chance(self, page_number: int) -> int:
         pass
 
     def print_statistics(self):
