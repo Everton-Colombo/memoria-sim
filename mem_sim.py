@@ -29,24 +29,37 @@ class MemorySimulator:
         Deve atualizar os contadores e aplicar a política de substituição se necessário.
         """
         
+        if self.debug:
+            print(f"Acessando endereço virtual: {virtual_address}")
+        
         page_number = virtual_address // self.page_size
         # offset = virtual_address % self.page_size (not used in this simulation)
 
         # Verify TLB:
         if page_number in self.tlb:
+            if self.debug:
+                print(f"TLB Hit para a página {page_number}")
+            
             self.tlb_hits += 1
             frame_number = self.tlb[page_number]
             self.tlb.move_to_end(page_number) # Updates order for LRU
             return
         
+        if self.debug:
+            print(f"TLB Miss para a página {page_number}")
         self.tlb_misses += 1
 
         # Verify Page Table:
         if page_number in self.page_table:
+            if self.debug:
+                print(f"Page Table Hit para a página {page_number}")
+            
             frame_number = self.page_table[page_number]
             self._update_tlb(page_number, frame_number)
             return
 
+        if self.debug:
+            print(f"Page Fault para a página {page_number}")
         self.page_faults += 1
         frame_number = self._handle_page_fault(page_number)
         self._update_tlb(page_number, frame_number)
