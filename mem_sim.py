@@ -13,11 +13,11 @@ class MemorySimulator:
         if replacement_policy not in ['LRU', 'SecondChance']:
             raise ValueError("Política de substituição inválida. Use 'LRU' ou 'SecondChance'.")
 
-        self.tlb: collections.OrderedDict = collections.OrderedDict() # Dict[int, int] -> page_number: frame_number
-        self.page_table: collections.OrderedDict = collections.OrderedDict() # Dict[int, int] -> page_number: frame_number
-        self.frames: List[Optional[int]] = [None] * num_frames # frames[frame_number] = page_number
+        self.tlb: collections.OrderedDict = collections.OrderedDict()           # Dict[int, int] -> page_number: frame_number
+        self.page_table: collections.OrderedDict = collections.OrderedDict()    # Dict[int, int] -> page_number: frame_number
+        self.frames: List[Optional[int]] = [None] * num_frames                  # frames[frame_number] = page_number
 
-        # contadores de estatísticas
+        # Stats counters
         self.tlb_hits = 0
         self.tlb_misses = 0
         self.page_faults = 0
@@ -25,10 +25,12 @@ class MemorySimulator:
         self.second_chance_bits: Dict[int, bool] = {} # page_number: reference_bit
 
 
-    def access_memory(self, virtual_address: int) -> None:
+    def access_memory(self, virtual_address: int) -> int:
         """
         Simula o acesso a um endereço virtual.
         Deve atualizar os contadores e aplicar a política de substituição se necessário.
+        
+        Retorna o número do frame onde a página está mapeada. (não usado pela simulação, mas achei interessante retornar)
         """
         
         if self.debug:
@@ -50,7 +52,7 @@ class MemorySimulator:
                 self.page_table.move_to_end(page_number)
             elif self.replacement_policy == 'SecondChance':
                 self.second_chance_bits[page_number] = True
-            return
+            return frame_number
         
         if self.debug:
             print(f"TLB Miss para a página {page_number}")
@@ -69,14 +71,15 @@ class MemorySimulator:
                 self.second_chance_bits[page_number] = True
             
             self._update_tlb(page_number, frame_number)
-            return
+            return frame_number
 
         if self.debug:
             print(f"Page Fault para a página {page_number}")
         self.page_faults += 1
         frame_number = self._handle_page_fault(page_number)
         self._update_tlb(page_number, frame_number)
-        
+        return frame_number
+
     def _update_tlb(self, page_number: int, frame_number: int) -> None:
         """
         Inserts/updates an entry in the TLB using LRU policy.
