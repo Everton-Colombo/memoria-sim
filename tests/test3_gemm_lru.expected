@@ -1,0 +1,12 @@
+============================================================
+SIMULADOR DE MEMÓRIA - Estatísticas de Acesso
+============================================================
+Política de Substituição:   LRU
+Tamanho da Página:          4096 bytes
+Entradas na TLB:            16
+Número de Frames:           64
+------------------------------------------------------------
+TLB Hits:                   995
+TLB Misses:                 4
+Page Faults:                4
+============================================================
