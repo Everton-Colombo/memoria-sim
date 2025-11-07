@@ -13,8 +13,8 @@ class MemorySimulator:
         if rep_policy not in ['LRU', 'SecondChance']:
             raise ValueError("Política de substituição inválida. Use 'LRU' ou 'SecondChance'.")
 
-        self.tlb: collections.OrderedDict = collections.OrderedDict()
-        self.page_table: Dict[int, int] = {}
+        self.tlb: collections.OrderedDict = collections.OrderedDict() # Dict[int, int] -> page_number: frame_number
+        self.page_table: collections.OrderedDict = collections.OrderedDict() # Dict[int, int] -> page_number: frame_number
         self.frames: List[Optional[int]] = [None] * num_frames # frames[frame_number] = page_number
 
         # contadores de estatísticas
@@ -42,7 +42,9 @@ class MemorySimulator:
             
             self.tlb_hits += 1
             frame_number = self.tlb[page_number]
-            self.tlb.move_to_end(page_number) # Updates order for LRU
+            # Update order for LRU:
+            self.tlb.move_to_end(page_number) 
+            self.page_table.move_to_end(page_number)
             return
         
         if self.debug:
@@ -55,6 +57,7 @@ class MemorySimulator:
                 print(f"Page Table Hit para a página {page_number}")
             
             frame_number = self.page_table[page_number]
+            self.page_table.move_to_end(page_number) # Update order for LRU
             self._update_tlb(page_number, frame_number)
             return
 
@@ -63,6 +66,7 @@ class MemorySimulator:
         self.page_faults += 1
         frame_number = self._handle_page_fault(page_number)
         self._update_tlb(page_number, frame_number)
+        self.access_memory(virtual_address)  # Retry access after handling page fault
         
     def _update_tlb(self, page_number: int, frame_number: int) -> None:
         """
@@ -92,18 +96,28 @@ class MemorySimulator:
         
         if frame_number is None:
             if self.rep_policy == 'LRU':
-                frame_number = self._find_victim_lru(page_number)
+                frame_number = self._find_victim_lru()
             elif self.rep_policy == 'SecondChance':
-                frame_number = self._find_victim_second_chance(page_number)
+                frame_number = self._find_victim_second_chance()
         
         self.frames[frame_number] = page_number
         self.page_table[page_number] = frame_number
         self._update_tlb(page_number, frame_number)
     
-    def _find_victim_lru(self, page_number: int) -> int:
-        pass
-    
-    def _find_victim_second_chance(self, page_number: int) -> int:
+    def _find_victim_lru(self) -> int:
+        """selects a victim page using LRU policy and returns its frame number."""
+
+        victim_page, frame_to_evict = self.page_table.popitem(last=False) # First entry is the LRU
+
+        if victim_page in self.tlb:
+            del self.tlb[victim_page]
+        
+        if self.debug:
+            print(f"LRU: Removendo página {victim_page} do frame {frame_to_evict}")
+        
+        return frame_to_evict
+
+    def _find_victim_second_chance(self) -> int:
         pass
 
     def print_statistics(self):
