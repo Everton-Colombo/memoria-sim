@@ -2,15 +2,15 @@ import collections
 from typing import Dict, List, Tuple, Optional, Literal
 
 class MemorySimulator:
-    def __init__(self, page_size: int, num_tlb_entries: int, num_frames: int, rep_policy: Literal['LRU', 'SecondChance'], debug: bool = False):
+    def __init__(self, page_size: int, num_tlb_entries: int, num_frames: int, replacement_policy: Literal['LRU', 'SecondChance'], debug: bool = False):
         self.debug = debug
         
         self.page_size = page_size
         self.num_tlb_entries = num_tlb_entries
         self.num_frames = num_frames    
-        self.rep_policy = rep_policy
+        self.replacement_policy = replacement_policy
 
-        if rep_policy not in ['LRU', 'SecondChance']:
+        if replacement_policy not in ['LRU', 'SecondChance']:
             raise ValueError("Política de substituição inválida. Use 'LRU' ou 'SecondChance'.")
 
         self.tlb: collections.OrderedDict = collections.OrderedDict() # Dict[int, int] -> page_number: frame_number
@@ -21,6 +21,8 @@ class MemorySimulator:
         self.tlb_hits = 0
         self.tlb_misses = 0
         self.page_faults = 0
+        
+        self.second_chance_bits: Dict[int, bool] = {} # page_number: reference_bit
 
 
     def access_memory(self, virtual_address: int) -> None:
@@ -42,9 +44,12 @@ class MemorySimulator:
             
             self.tlb_hits += 1
             frame_number = self.tlb[page_number]
-            # Update order for LRU:
             self.tlb.move_to_end(page_number) 
-            self.page_table.move_to_end(page_number)
+
+            if self.replacement_policy == 'LRU':
+                self.page_table.move_to_end(page_number)
+            elif self.replacement_policy == 'SecondChance':
+                self.second_chance_bits[page_number] = True
             return
         
         if self.debug:
@@ -57,7 +62,12 @@ class MemorySimulator:
                 print(f"Page Table Hit para a página {page_number}")
             
             frame_number = self.page_table[page_number]
-            self.page_table.move_to_end(page_number) # Update order for LRU
+            
+            if self.replacement_policy == 'LRU':
+                self.page_table.move_to_end(page_number)
+            elif self.replacement_policy == 'SecondChance':
+                self.second_chance_bits[page_number] = True
+            
             self._update_tlb(page_number, frame_number)
             return
 
@@ -66,7 +76,6 @@ class MemorySimulator:
         self.page_faults += 1
         frame_number = self._handle_page_fault(page_number)
         self._update_tlb(page_number, frame_number)
-        self.access_memory(virtual_address)  # Retry access after handling page fault
         
     def _update_tlb(self, page_number: int, frame_number: int) -> None:
         """
@@ -95,14 +104,18 @@ class MemorySimulator:
         frame_number = self._allocate_frame()
         
         if frame_number is None:
-            if self.rep_policy == 'LRU':
+            if self.replacement_policy == 'LRU':
                 frame_number = self._find_victim_lru()
-            elif self.rep_policy == 'SecondChance':
+            elif self.replacement_policy == 'SecondChance':
                 frame_number = self._find_victim_second_chance()
         
         self.frames[frame_number] = page_number
         self.page_table[page_number] = frame_number
-        self._update_tlb(page_number, frame_number)
+        
+        if self.replacement_policy == 'SecondChance':
+            self.second_chance_bits[page_number] = True
+        
+        return frame_number
     
     def _find_victim_lru(self) -> int:
         """selects a victim page using LRU policy and returns its frame number."""
@@ -118,7 +131,25 @@ class MemorySimulator:
         return frame_to_evict
 
     def _find_victim_second_chance(self) -> int:
-        pass
+        """selects a victim page using Second Chance policy and returns its frame number."""
+        while True:
+            victim_page, frame_to_evict = self.page_table.popitem(last=False) # First entry is the oldest
+
+            if self.second_chance_bits.get(victim_page, False) == True:
+                # Give a second chance
+                self.second_chance_bits[victim_page] = False
+                self.page_table[victim_page] = frame_to_evict
+                continue
+            else:
+                # Evict this page
+                if victim_page in self.tlb:
+                    del self.tlb[victim_page]
+                del self.second_chance_bits[victim_page]
+
+                if self.debug:
+                    print(f"Second Chance: Removendo página {victim_page} do frame {frame_to_evict}")
+                
+                return frame_to_evict
 
     def print_statistics(self):
         print("=" * 60)
